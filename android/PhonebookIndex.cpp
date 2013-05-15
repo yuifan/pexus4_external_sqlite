@@ -143,8 +143,15 @@ int32_t GetPhonebookIndex(UCharIterator * iter, const char * locale, UChar * out
 
   UChar c = out[0];
 
-  // We are only interested in letters
   if (!u_isalpha(c)) {
+    // Digits go into a # section. Everything else goes into the empty section
+    // The unicode function u_isdigit would also identify other characters as digits (arabic),
+    // but if we caught them here we'd risk having the same section before and after alpha-letters
+    // which might break the assumption that each section exists only once
+    if (c >= '0' && c <= '9') {
+      out[0] = '#';
+      return 1;
+    }
     return 0;
   }
 
@@ -162,19 +169,23 @@ int32_t GetPhonebookIndex(UCharIterator * iter, const char * locale, UChar * out
   c = android::GetNormalizedCodePoint(c, next, NULL);
 
   // Traditional grouping of Hiragana characters
-  if (0x3042 <= c && c <= 0x309F) {
+  if (0x3041 <= c && c <= 0x309F) {
     if (c < 0x304B) c = 0x3042;         // a
     else if (c < 0x3055) c = 0x304B;    // ka
     else if (c < 0x305F) c = 0x3055;    // sa
     else if (c < 0x306A) c = 0x305F;    // ta
     else if (c < 0x306F) c = 0x306A;    // na
     else if (c < 0x307E) c = 0x306F;    // ha
-    else if (c < 0x3084) c = 0x307E;    // ma
+    else if (c < 0x3083) c = 0x307E;    // ma
     else if (c < 0x3089) c = 0x3084;    // ya
-    else if (c < 0x308F) c = 0x3089;    // ra
-    else c = 0x308F;                    // wa
+    else if (c < 0x308E) c = 0x3089;    // ra
+    else if (c < 0x3094) c = 0x308F;    // wa
+    else return 0;                      // Others are not readable
     out[0] = c;
     return 1;
+  } else if (0x30A0 <= c && c <= 0x30FF) {
+    // Dot, onbiki, iteration marks are not readable
+    return 0;
   }
 
   if (is_CJK(c)) {

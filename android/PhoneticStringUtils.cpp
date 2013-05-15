@@ -18,7 +18,7 @@
 #include <stdlib.h>
 
 #include "PhoneticStringUtils.h"
-#include <utils/String8.h>
+#include <utils/Unicode.h>
 
 // We'd like 0 length string last of sorted list. So when input string is NULL
 // or 0 length string, we use these instead.
@@ -153,12 +153,45 @@ static int GetNormalizedHiragana(int codepoint) {
         case 0x3045:
         case 0x3047:
         case 0x3049:
+        case 0x3063:
+        case 0x3083:
+        case 0x3085:
+        case 0x3087:
         case 0x308E: // xwa
             return codepoint + 1;
         case 0x3095: // xka
             return 0x304B;
-        case 0x3096: // xku
+        case 0x3096: // xke
+            return 0x3051;
+        case 0x31F0: // xku
             return 0x304F;
+        case 0x31F1: // xsi
+            return 0x3057;
+        case 0x31F2: // xsu
+            return 0x3059;
+        case 0x31F3: // xto
+            return 0x3068;
+        case 0x31F4: // xnu
+            return 0x306C;
+        case 0x31F5: // xha
+            return 0x306F;
+        case 0x31F6: // xhi
+            return 0x3072;
+        case 0x31F7: // xhu
+            return 0x3075;
+        case 0x31F8: // xhe
+            return 0x3078;
+        case 0x31F9: // xho
+            return 0x307B;
+        case 0x31FA: // xmu
+            return 0x3080;
+        case 0x31FB: // xra
+        case 0x31FC: // xri
+        case 0x31FD: // xru
+        case 0x31FE: // xre
+        case 0x31FF: // xro
+            // ra: 0x3089
+            return 0x3089 + (codepoint - 0x31FB);
         default:
             return codepoint;
     }
@@ -172,6 +205,12 @@ static int GetNormalizedKana(char32_t codepoint,
         // Make fullwidth katakana same as hiragana.
         // 96 == 0x30A1 - 0x3041c
         codepoint = codepoint - 96;
+    } else if (codepoint == 0x309F) {
+        // Digraph YORI; Yo
+        codepoint = 0x3088;
+    } else if (codepoint == 0x30FF) {
+        // Digraph KOTO; Ko
+        codepoint = 0x3053;
     } else {
         codepoint = GetHiraganaFromHalfwidthKatakana(
                 codepoint, next_codepoint, next_is_consumed);
@@ -223,21 +262,22 @@ static bool GetExpectedString(
 
     char32_t codepoints[MAX_CODEPOINTS]; // if array size is changed the for loop needs to be changed
 
-    size_t src_len = utf8_length(src);
-    if (src_len == 0) {
+    ssize_t src_len = utf8_length(src);
+    if (src_len <= 0) {
         return false;
     }
+
     bool next_is_consumed;
     size_t j = 0;
-    for (size_t i = 0; i < src_len && j < MAX_CODEPOINTS;) {
-        int32_t ret = utf32_at(src, src_len, i, &i);
+    for (size_t i = 0; i < (size_t)src_len && j < MAX_CODEPOINTS;) {
+        int32_t ret = utf32_from_utf8_at(src, src_len, i, &i);
         if (ret < 0) {
             // failed to parse UTF-8
             return false;
         }
         ret = get_codepoint_function(
                 static_cast<char32_t>(ret),
-                i + 1 < src_len ? src[i + 1] : 0,
+                i + 1 < (size_t)src_len ? src[i + 1] : 0,
                 &next_is_consumed);
         if (ret > 0) {
             codepoints[j] = static_cast<char32_t>(ret);
@@ -256,17 +296,17 @@ static bool GetExpectedString(
         length = 1;
     }
 
-    size_t new_len = utf8_length_from_utf32(codepoints, length);
+    ssize_t new_len = utf32_to_utf8_length(codepoints, length);
+    if (new_len < 0) {
+        return false;
+    }
+
     *dst = static_cast<char *>(malloc(new_len + 1));
     if (*dst == NULL) {
         return false;
     }
 
-    if (utf32_to_utf8(codepoints, length, *dst, new_len + 1) != new_len) {
-        free(*dst);
-        *dst = NULL;
-        return false;
-    }
+    utf32_to_utf8(codepoints, length, *dst);
 
     *dst_len = new_len;
     return true;
